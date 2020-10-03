@@ -218,13 +218,13 @@ public class MainActivity extends AppCompatActivity {
     @RequiresApi(api = Build.VERSION_CODES.O)
     private boolean doWork() {
         while (mCurrentStep == null) {
-            mCurrentStep = mSteps.remove(0);
-
-            Log.d(TAG, "Run step: " + mCurrentStep);
-
             ((ProgressBar) findViewById(R.id.totalProgressBar)).setProgress(
                     (int) ((1.0 - ((double) mSteps.size() / (double) mTotalSteps)) * 100)
             );
+
+            mCurrentStep = mSteps.remove(0);
+
+            Log.d(TAG, "Run step: " + mCurrentStep);
 
             // Finished
             if (mCurrentStep instanceof FinishedStep) {
@@ -245,13 +245,13 @@ public class MainActivity extends AppCompatActivity {
                 speak(mCurrentExercise.exercise.name + ". " + mCurrentExercise.exercise.briefDescription);
                 mCurrentStep = null;
             } else if (mCurrentStep instanceof ActionStep) {
-                mCurrentExercise.numActionsDone++;
-                mCurrentAction = (ActionStep) mCurrentStep;
-                mCurrentAction.resetTime();
-
                 ((ProgressBar) findViewById(R.id.currentProgressBar)).setProgress(
                         (int) (((double) mCurrentExercise.numActionsDone / mCurrentExercise.numActions) * 100)
                 );
+
+                mCurrentExercise.numActionsDone++;
+                mCurrentAction = (ActionStep) mCurrentStep;
+                mCurrentAction.resetTime();
 
                 speak(mCurrentAction.text);
                 break;

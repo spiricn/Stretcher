@@ -9,15 +9,21 @@ import android.media.ToneGenerator;
 import android.os.Bundle;
 import android.os.Handler;
 import android.speech.tts.TextToSpeech;
+import android.util.Log;
 import android.view.WindowManager;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.util.List;
 import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
+    /**
+     * Log tag
+     */
+    private static final String TAG = MainActivity.class.getCanonicalName();
 
     enum State {
         /**
@@ -185,15 +191,13 @@ public class MainActivity extends AppCompatActivity {
 
         mTts = new TextToSpeech(getApplicationContext(), status -> {
             if (status == TextToSpeech.ERROR) {
-                Intent installIntent = new Intent();
-                installIntent.setAction(
-                        TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA);
-                startActivity(installIntent);
-                finish();
-                return;
-            }
 
-            mTts.setLanguage(Locale.US);
+                Toast.makeText(this, "TTS not available: status=" + status, Toast.LENGTH_SHORT).show();
+                mTts = null;
+            }
+            else {
+                mTts.setLanguage(Locale.US);
+            }
 
             playPause();
         });
@@ -222,8 +226,10 @@ public class MainActivity extends AppCompatActivity {
 
         mHandler.removeCallbacksAndMessages(null);
 
-        mTts.stop();
-        mTts.shutdown();
+        if(mTts != null) {
+            mTts.stop();
+            mTts.shutdown();
+        }
 
         finish();
     }
@@ -337,7 +343,6 @@ public class MainActivity extends AppCompatActivity {
         return true;
     }
 
-
     void startExercise(int index) {
         mSession = new ExerciseSession(mEntries.get(index));
 
@@ -349,7 +354,16 @@ public class MainActivity extends AppCompatActivity {
         speak(mSession.exercise.name + ". " + mSession.exercise.briefDescription);
     }
 
+    /**
+     * Speak some text if TTS is available
+     *
+     * @param string Text to speak
+     */
     private void speak(String string) {
-        mTts.speak(string, TextToSpeech.QUEUE_ADD, null);
+        Log.d(TAG, string);
+
+        if(mTts != null) {
+            mTts.speak(string, TextToSpeech.QUEUE_ADD, null);
+        }
     }
 }

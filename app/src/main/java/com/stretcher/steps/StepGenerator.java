@@ -32,48 +32,58 @@ public class StepGenerator {
         for (int exerciseIndex = 0; exerciseIndex < exercises.size(); exerciseIndex++) {
             Exercise exercise = exercises.get(exerciseIndex);
 
-            ArrayList<ActionStep> actions = new ArrayList<>();
+            // Generate actions for this exercise
+            List<IStep> actions = generateExerciseActions(exercise);
 
-            for (int i = 0; i < exercise.numRepetitions; i++) {
-
-                // Do rep
-                actions.add(new ActionStep(
-                        exercise.bothSides ? "Hold left" : "Hold", kHOLD_DURATION_MS
-                ));
-
-                if (exercise.bothSides) {
-                    // Rest between sides
-                    actions.add(new ActionStep(
-                            "Rest", kREP_REST_DURATION_MS
-                    ));
-
-                    // Do other side
-                    actions.add(new ActionStep("Hold right", kHOLD_DURATION_MS));
-                }
-
-                // Rest between reps (if not the last exercise)
-                if (i != exercise.numRepetitions - 1) {
-                    actions.add(new ActionStep(
-                            "Rest", kREP_REST_DURATION_MS
-                    ));
-                }
-            }
-
+            // Switch exercise
             steps.add(new SwitchExerciseStep(exercise, actions.size()));
 
+            if (exerciseIndex == 0) {
+                steps.add(generateRest(kREP_REST_DURATION_MS));
+            }
+
+            // Do actions
             steps.addAll(actions);
 
             // Rest after the exercise
             if (exerciseIndex != exercises.size() - 1) {
-                actions.add(new ActionStep(
-                        "Rest", kREST_DURATION_MS
-                ));
+                actions.add(generateRest(kREST_DURATION_MS));
             }
         }
 
         steps.add(new FinishedStep());
 
         return steps;
+    }
+
+    private static IStep generateRest(long durationMs) {
+        return new ActionStep("Rest", durationMs);
+    }
+
+    private static List<IStep> generateExerciseActions(Exercise exercise) {
+        ArrayList<IStep> actions = new ArrayList<>();
+        for (int i = 0; i < exercise.numRepetitions; i++) {
+
+            // Do rep
+            actions.add(new ActionStep(
+                    exercise.bothSides ? "Hold left" : "Hold", kHOLD_DURATION_MS
+            ));
+
+            if (exercise.bothSides) {
+                // Rest between sides
+                actions.add(generateRest(kREP_REST_DURATION_MS));
+
+                // Do other side
+                actions.add(new ActionStep("Hold right", kHOLD_DURATION_MS));
+            }
+
+            // Rest between reps (if not the last exercise)
+            if (i != exercise.numRepetitions - 1) {
+                actions.add(generateRest(kREP_REST_DURATION_MS));
+            }
+        }
+
+        return actions;
     }
 
 }

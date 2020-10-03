@@ -27,7 +27,7 @@ public class Exercise {
     /**
      * Indication if each rep should be repeated for both sides (e.g. left and right)
      */
-    public boolean bothSides = false;
+    public boolean bothSides;
 
     /**
      * How many reps

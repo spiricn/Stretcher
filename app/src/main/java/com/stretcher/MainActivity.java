@@ -3,7 +3,6 @@ package com.stretcher;
 import androidx.appcompat.app.AppCompatActivity;
 
 import android.annotation.SuppressLint;
-import android.content.Intent;
 import android.media.AudioManager;
 import android.media.ToneGenerator;
 import android.os.Bundle;
@@ -13,9 +12,11 @@ import android.util.Log;
 import android.view.WindowManager;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -24,23 +25,6 @@ public class MainActivity extends AppCompatActivity {
      * Log tag
      */
     private static final String TAG = MainActivity.class.getCanonicalName();
-
-    enum State {
-        /**
-         * rest between reps
-         */
-        REP_REST,
-
-        /**
-         * rest between exercises
-         */
-        REST,
-
-        /**
-         * hold position
-         */
-        HOLD,
-    }
 
     /**
      * Rest between exercises
@@ -55,38 +39,55 @@ public class MainActivity extends AppCompatActivity {
     /**
      * How long should the position be held for
      */
-    public long kHOLD_DURATION_MS = 15_000;
+    public static final long kHOLD_DURATION_MS = 15_000;
 
-    static class ExerciseSession {
-        /**
-         * Number of reps done
-         */
-        int numRepsDone = 0;
+    interface IStep {
+    }
 
+    /**
+     * Switch to a new exercise
+     */
+    static class SwitchExerciseStep implements IStep {
         /**
-         * Current exercise
+         * Exercise
          */
         Exercise exercise;
 
         /**
-         * Current state
+         * Total number of actions
          */
-        State state = State.REST;
+        int numActions;
+
+        /**
+         * Number of actions done
+         */
+        int numActionsDone;
+
+        public SwitchExerciseStep(Exercise exercise, int numActions) {
+            this.exercise = exercise;
+            this.numActions = numActions;
+            this.numActionsDone = 0;
+        }
+    }
+
+    /**
+     * Exercise action step
+     */
+    static class ActionStep implements IStep {
+        /**
+         * Description
+         */
+        String text;
+
+        /**
+         * Duration
+         */
+        long durationMs;
 
         /**
          * Timestamp when the state was started
          */
         long startTimeMs;
-
-        /**
-         * Total state duration
-         */
-        long durationMs;
-
-        /**
-         * Indication if the first side is being held
-         */
-        boolean firstSide = true;
 
         /**
          * Indication if session is paused or not
@@ -101,15 +102,15 @@ public class MainActivity extends AppCompatActivity {
         /**
          * How many warning beeps left to be played (one per each second before state is finished)
          */
-        int mNumWarningBeeps = 0;
-
-        ExerciseSession(Exercise exercise) {
-            this.exercise = exercise;
-            resetTime();
-        }
+        int mNumWarningBeeps = 3;
 
         void resetTime() {
             startTimeMs = System.currentTimeMillis();
+        }
+
+        public ActionStep(String text, long durationMs) {
+            this.text = text;
+            this.durationMs = durationMs;
         }
 
         long getElapsedTimeMs() {
@@ -141,32 +142,24 @@ public class MainActivity extends AppCompatActivity {
                 startTimeMs = System.currentTimeMillis() - (pausedTimeMs - startTimeMs);
             }
         }
-
-
-        void setState(State state, long durationMs) {
-            this.state = state;
-            this.durationMs = durationMs;
-
-            resetTime();
-
-            mNumWarningBeeps = 3;
-        }
     }
 
     /**
-     * Current session
+     * Start everything
      */
-    private ExerciseSession mSession = null;
+    static class StartedStep implements IStep {
+    }
+
+    /**
+     * All done
+     */
+    static class FinishedStep implements IStep {
+    }
 
     /**
      * Action handler
      */
     private Handler mHandler;
-
-    /**
-     * All available exercises
-     */
-    private List<Exercise> mEntries;
 
     /**
      * Use to notify the user about current action
@@ -178,6 +171,31 @@ public class MainActivity extends AppCompatActivity {
      */
     private ToneGenerator mToneGen = new ToneGenerator(AudioManager.STREAM_MUSIC, 100);
 
+    /**
+     * Steps to be executed
+     */
+    List<IStep> mSteps;
+
+    /**
+     * Currently executing steps
+     */
+    IStep mCurrentStep = null;
+
+    /**
+     * Number of total steps
+     */
+    int mTotalSteps;
+
+    /**
+     * Current exercise step
+     */
+    SwitchExerciseStep mCurrentExercise;
+
+    /**
+     * Current exercise action stpe
+     */
+    ActionStep mCurrentAction;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -185,38 +203,109 @@ public class MainActivity extends AppCompatActivity {
 
         mHandler = new Handler(getMainLooper());
 
-        mEntries = Exercise.load();
+        mSteps = generateSteps(Exercise.load());
+        mTotalSteps = mSteps.size();
 
-        findViewById(R.id.buttonPlayPause).setOnClickListener(view -> MainActivity.this.playPause());
+
+        findViewById(R.id.buttonPlayPause).setOnClickListener(view -> MainActivity.this.togglePlayPause());
 
         mTts = new TextToSpeech(getApplicationContext(), status -> {
             if (status == TextToSpeech.ERROR) {
 
                 Toast.makeText(this, "TTS not available: status=" + status, Toast.LENGTH_SHORT).show();
                 mTts = null;
-            }
-            else {
+            } else {
                 mTts.setLanguage(Locale.US);
             }
 
-            playPause();
+            doWork();
+
+            Runnable runnable = new Runnable() {
+                @Override
+                public void run() {
+                    if (!doWork()) {
+                        return;
+                    }
+
+                    mHandler.postDelayed(this, 100);
+                }
+            };
+
+            mHandler.post(runnable);
         });
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    }
+
+    /**
+     * Given a list of exercises, generate a list of steps
+     */
+    static List<IStep> generateSteps(List<Exercise> exercises) {
+        ArrayList<IStep> steps = new ArrayList<>();
+
+        steps.add(new StartedStep());
+
+        for (int exerciseIndex = 0; exerciseIndex < exercises.size(); exerciseIndex++) {
+            Exercise exercise = exercises.get(exerciseIndex);
+
+            ArrayList<ActionStep> actions = new ArrayList<>();
+
+            for (int i = 0; i < exercise.numRepetitions; i++) {
+
+                // Do rep
+                actions.add(new ActionStep(
+                        exercise.bothSides ? "Hold left" : "Hold", kHOLD_DURATION_MS
+                ));
+
+                if (exercise.bothSides) {
+                    // Rest between sides
+                    actions.add(new ActionStep(
+                            "Rest", kREP_REST_DURATION_MS
+                    ));
+
+                    // Do other side
+                    actions.add(new ActionStep("Hold right", kHOLD_DURATION_MS));
+                }
+
+                // Rest between reps (if not the last exercise)
+                if (i != exercise.numRepetitions - 1) {
+                    actions.add(new ActionStep(
+                            "Rest", kREP_REST_DURATION_MS
+                    ));
+                }
+            }
+
+            steps.add(new SwitchExerciseStep(exercise, actions.size()));
+            steps.addAll(actions);
+
+            if (exerciseIndex != exercises.size() - 1) {
+                actions.add(new ActionStep(
+                        "Rest", kREST_DURATION_MS
+                ));
+            }
+        }
+
+        steps.add(new FinishedStep());
+
+        return steps;
     }
 
     @Override
     public void onPause() {
         super.onPause();
 
-        mSession.togglePause(true);
+        if (mCurrentAction != null) {
+            mCurrentAction.togglePause(true);
+        }
     }
 
     @Override
     public void onResume() {
         super.onResume();
 
-        mSession.togglePause(false);
+        if (mCurrentAction != null) {
+            mCurrentAction.togglePause(false);
+        }
     }
 
     @Override
@@ -226,7 +315,7 @@ public class MainActivity extends AppCompatActivity {
 
         mHandler.removeCallbacksAndMessages(null);
 
-        if(mTts != null) {
+        if (mTts != null) {
             mTts.stop();
             mTts.shutdown();
         }
@@ -234,31 +323,15 @@ public class MainActivity extends AppCompatActivity {
         finish();
     }
 
-    private void playPause() {
-        if (mSession == null) {
-            Runnable runnable = new Runnable() {
-                @Override
-                public void run() {
-                    if (!step()) {
-                        return;
-                    }
-
-                    mHandler.postDelayed(this, 100);
-                }
-            };
-
-            startExercise(0);
-            mSession.setState(State.REP_REST, kREP_REST_DURATION_MS);
-
-            mHandler.post(runnable);
-
+    private void togglePlayPause() {
+        if (mCurrentAction == null) {
             return;
         }
 
-        mSession.togglePause(!mSession.paused);
+        mCurrentAction.togglePause(!mCurrentAction.paused);
 
         ((ImageButton) findViewById(R.id.buttonPlayPause)).setImageResource(
-                mSession.paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause
+                mCurrentAction.paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause
         );
     }
 
@@ -272,87 +345,66 @@ public class MainActivity extends AppCompatActivity {
                 minutes, seconds, milliseconds);
     }
 
-    private boolean step() {
-        // Give off warning that state is about to expire
-        if (mSession.mNumWarningBeeps > 0 && mSession.getRemainingMs() <= (mSession.mNumWarningBeeps * 1000)) {
-            mSession.mNumWarningBeeps -= 1;
-            mToneGen.startTone(mSession.mNumWarningBeeps > 0 ? ToneGenerator.TONE_CDMA_PIP : ToneGenerator.TONE_DTMF_A, mSession.mNumWarningBeeps > 0 ? 150 : 700);
-        }
+    private boolean doWork() {
+        while (mCurrentStep == null) {
+            mCurrentStep = mSteps.remove(0);
 
-        if (mSession.isCompleted()) {
-            switch (mSession.state) {
-                case REST:
-                case REP_REST:
-                    mSession.setState(State.HOLD, kHOLD_DURATION_MS);
+            ((ProgressBar) findViewById(R.id.totalProgressBar)).setProgress(
+                    (int) ((1.0 - ((double) mSteps.size() / (double) mTotalSteps)) * 100)
+            );
 
-                    String side = "";
+            // Finished
+            if (mCurrentStep instanceof FinishedStep) {
+                // All done
+                speak("All exercises finished");
+                ((TextView) findViewById(R.id.timer)).setText("Done");
+                return false;
+            } else if (mCurrentStep instanceof SwitchExerciseStep) {
+                // New exercise
+                mCurrentExercise = ((SwitchExerciseStep) mCurrentStep);
 
-                    if (mSession.exercise.bothSides) {
-                        side += mSession.firstSide ? " left " : " right ";
-                    }
+                TextView textView = findViewById(R.id.description);
+                textView.setText(mCurrentExercise.exercise.fullDescription);
 
-                    speak("Hold " + side + " for " + (kHOLD_DURATION_MS / 1000) + " seconds");
+                ImageView imageView = findViewById(R.id.image);
+                imageView.setImageResource(mCurrentExercise.exercise.drawable);
 
-                    break;
+                speak(mCurrentExercise.exercise.name + ". " + mCurrentExercise.exercise.briefDescription);
+                mCurrentStep = null;
+            } else if (mCurrentStep instanceof ActionStep) {
+                mCurrentExercise.numActionsDone++;
+                mCurrentAction = (ActionStep) mCurrentStep;
+                mCurrentAction.resetTime();
 
-                case HOLD:
-                    if (mSession.exercise.bothSides && mSession.firstSide) {
-                        mSession.firstSide = false;
-                    } else {
-                        mSession.numRepsDone++;
-                        mSession.firstSide = true;
-                    }
+                ((ProgressBar) findViewById(R.id.currentProgressBar)).setProgress(
+                        (int) (((double) mCurrentExercise.numActionsDone / mCurrentExercise.numActions) * 100)
+                );
 
-                    if (mSession.numRepsDone == mSession.exercise.numRepetitions) {
-                        int nextIndex = mEntries.indexOf(mSession.exercise) + 1;
-
-                        if (nextIndex == mEntries.size()) {
-                            // All done
-                            speak("All exercises finished");
-                            ((TextView) findViewById(R.id.timer)).setText("Done");
-                            return false;
-                        }
-
-                        // Move to next exercise
-                        startExercise(nextIndex);
-
-                        mSession.setState(State.REST, kREST_DURATION_MS);
-
-                    } else {
-                        // Rest between reps
-                        mSession.setState(State.REP_REST, kREP_REST_DURATION_MS);
-                        speak("Rest for " + (mSession.durationMs / 1000) + " seconds");
-                    }
-
-                    break;
+                speak(mCurrentAction.text);
+                break;
+            } else if (mCurrentStep instanceof StartedStep) {
+                mCurrentStep = null;
             }
         }
 
-        String elapsedTimeStr = formatElapsedTime(mSession.getRemainingMs());
+        // Give off warning that state is about to expire
+        if (mCurrentAction.mNumWarningBeeps > 0 && mCurrentAction.getRemainingMs() <= (mCurrentAction.mNumWarningBeeps * 1000)) {
+            mCurrentAction.mNumWarningBeeps -= 1;
+            mToneGen.startTone(mCurrentAction.mNumWarningBeeps > 0 ? ToneGenerator.TONE_CDMA_PIP : ToneGenerator.TONE_DTMF_A, mCurrentAction.mNumWarningBeeps > 0 ? 150 : 700);
+        }
+        String elapsedTimeStr = formatElapsedTime(mCurrentAction.getRemainingMs());
 
-        String status;
-
-        if (mSession.state == State.HOLD) {
-            status = "Hold " + (mSession.numRepsDone + 1) + "/" + mSession.exercise.numRepetitions;
-        } else {
-            status = "Rest ..";
+        if (mCurrentAction.isCompleted()) {
+            mCurrentStep = null;
+            mCurrentAction = null;
+            return true;
         }
 
-        ((TextView) findViewById(R.id.timer)).setText(elapsedTimeStr + "\n" + status);
+        ((TextView) findViewById(R.id.timer)).setText(elapsedTimeStr + "\n" + mCurrentAction.text);
 
         return true;
     }
 
-    void startExercise(int index) {
-        mSession = new ExerciseSession(mEntries.get(index));
-
-        Exercise entry = mEntries.get(index);
-
-        ((TextView) findViewById(R.id.description)).setText(entry.fullDescription);
-        ((ImageView) findViewById(R.id.image)).setImageResource(entry.drawable);
-
-        speak(mSession.exercise.name + ". " + mSession.exercise.briefDescription);
-    }
 
     /**
      * Speak some text if TTS is available
@@ -362,7 +414,7 @@ public class MainActivity extends AppCompatActivity {
     private void speak(String string) {
         Log.d(TAG, string);
 
-        if(mTts != null) {
+        if (mTts != null) {
             mTts.speak(string, TextToSpeech.QUEUE_ADD, null);
         }
     }

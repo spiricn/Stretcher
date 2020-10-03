@@ -124,6 +124,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         findViewById(R.id.buttonPlayPause).setOnClickListener(view -> MainActivity.this.togglePlayPause());
+        findViewById(R.id.btnSkip).setOnClickListener(view -> MainActivity.this.skipAction());
 
         // Hide the status bar
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN);
@@ -202,10 +203,24 @@ public class MainActivity extends AppCompatActivity {
                 minutes, seconds, milliseconds);
     }
 
+    private void skipAction() {
+        if (mCurrentAction != null) {
+
+            mTts.stop();
+
+            mCurrentAction.togglePause(false);
+
+            mCurrentStep = null;
+            mCurrentAction = null;
+        }
+    }
+
     @RequiresApi(api = Build.VERSION_CODES.O)
     private boolean doWork() {
         while (mCurrentStep == null) {
             mCurrentStep = mSteps.remove(0);
+
+            Log.d(TAG, "Run step: " + mCurrentStep);
 
             ((ProgressBar) findViewById(R.id.totalProgressBar)).setProgress(
                     (int) ((1.0 - ((double) mSteps.size() / (double) mTotalSteps)) * 100)

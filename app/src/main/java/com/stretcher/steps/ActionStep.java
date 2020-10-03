@@ -72,4 +72,9 @@ public class ActionStep implements IStep {
             startTimeMs = System.currentTimeMillis() - (pausedTimeMs - startTimeMs);
         }
     }
+
+    @Override
+    public String toString() {
+        return "[ActionStep " + this.text + " , " + this.durationMs + "]";
+    }
 }

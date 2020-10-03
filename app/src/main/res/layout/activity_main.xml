@@ -71,4 +71,14 @@
         app:layout_constraintHorizontal_bias="0.622"
         app:layout_constraintStart_toStartOf="@+id/description" />
 
+    <ImageButton
+        android:id="@+id/btnSkip"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginTop="1dp"
+        app:layout_constraintStart_toEndOf="@+id/buttonPlayPause"
+        app:layout_constraintTop_toTopOf="@+id/buttonPlayPause"
+        app:srcCompat="@android:drawable/ic_media_next" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

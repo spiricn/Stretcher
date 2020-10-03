@@ -1,5 +1,7 @@
 package com.stretcher.steps;
 
+import android.util.Log;
+
 import com.stretcher.Exercise;
 
 import java.util.ArrayList;
@@ -38,17 +40,11 @@ public class StepGenerator {
             // Switch exercise
             steps.add(new SwitchExerciseStep(exercise, actions.size()));
 
-            if (exerciseIndex == 0) {
-                steps.add(generateRest(kREP_REST_DURATION_MS));
-            }
+            // Rest before first hold
+            steps.add(generateRest(exerciseIndex == 0 ? kREP_REST_DURATION_MS : kREST_DURATION_MS));
 
             // Do actions
             steps.addAll(actions);
-
-            // Rest after the exercise
-            if (exerciseIndex != exercises.size() - 1) {
-                actions.add(generateRest(kREST_DURATION_MS));
-            }
         }
 
         steps.add(new FinishedStep());

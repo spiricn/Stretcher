@@ -1,7 +1,12 @@
 package com.stretcher;
 
+import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 
+import android.content.Context;
+import android.os.Build;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.annotation.SuppressLint;
 import android.media.AudioManager;
 import android.media.ToneGenerator;
@@ -197,6 +202,7 @@ public class MainActivity extends AppCompatActivity {
                 minutes, seconds, milliseconds);
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.O)
     private boolean doWork() {
         while (mCurrentStep == null) {
             mCurrentStep = mSteps.remove(0);
@@ -242,7 +248,22 @@ public class MainActivity extends AppCompatActivity {
         // Give off warning that state is about to expire
         if (mCurrentAction.numWarningBeeps > 0 && mCurrentAction.getRemainingMs() <= (mCurrentAction.numWarningBeeps * 1000)) {
             mCurrentAction.numWarningBeeps -= 1;
-            mToneGen.startTone(mCurrentAction.numWarningBeeps > 0 ? ToneGenerator.TONE_CDMA_PIP : ToneGenerator.TONE_DTMF_A, mCurrentAction.numWarningBeeps > 0 ? 150 : 700);
+
+            boolean lastWarning = mCurrentAction.numWarningBeeps == 0;
+
+            // Warning duration
+            int durationMs = lastWarning ? 700 : 150;
+
+            // Play a sound
+            mToneGen.startTone(
+                    lastWarning ? ToneGenerator.TONE_DTMF_A : ToneGenerator.TONE_CDMA_PIP,
+                    durationMs);
+
+            // Vibrate
+            Vibrator vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+            vibrator.vibrate(VibrationEffect.createOneShot(durationMs,
+                    lastWarning ? VibrationEffect.DEFAULT_AMPLITUDE : VibrationEffect.DEFAULT_AMPLITUDE
+            ));
         }
         String elapsedTimeStr = formatElapsedTime(mCurrentAction.getRemainingMs());
 

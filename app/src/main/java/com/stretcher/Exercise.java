@@ -91,7 +91,15 @@ public class Exercise {
                 5));
 
         entries.add(new Exercise(
-                "Should Blade Pull",
+                "Shrugs",
+                "Shrug shoulders.",
+                "While sitting, Shrug shoulders. Return to neutral.",
+                R.drawable.shrug,
+                false,
+                5));
+
+        entries.add(new Exercise(
+                "Shoulder Blade Pull",
                 "Bend arms behind back.",
                 "While sitting, bend raised arms at 90-degree angles. Relax shoulders and neck. Keeping arms and neck still, squeeze the muscles between shoulder blades drawing shoulder blades closer together. Return to neutral.",
                 R.drawable.should_blade_pull,

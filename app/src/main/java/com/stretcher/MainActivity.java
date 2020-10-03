@@ -18,7 +18,13 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import java.util.ArrayList;
+import com.stretcher.steps.ActionStep;
+import com.stretcher.steps.FinishedStep;
+import com.stretcher.steps.IStep;
+import com.stretcher.steps.StartedStep;
+import com.stretcher.steps.StepGenerator;
+import com.stretcher.steps.SwitchExerciseStep;
+
 import java.util.List;
 import java.util.Locale;
 
@@ -28,135 +34,11 @@ public class MainActivity extends AppCompatActivity {
      */
     private static final String TAG = MainActivity.class.getCanonicalName();
 
-    /**
-     * Rest between exercises
-     */
-    private static final long kREST_DURATION_MS = 10_000;
 
     /**
-     * Rest between reps
+     * Time elapsed between some work
      */
-    private static final long kREP_REST_DURATION_MS = 5000;
-
-    /**
-     * How long should the position be held for
-     */
-    public static final long kHOLD_DURATION_MS = 15_000;
-
-    interface IStep {
-    }
-
-    /**
-     * Switch to a new exercise
-     */
-    static class SwitchExerciseStep implements IStep {
-        /**
-         * Exercise
-         */
-        Exercise exercise;
-
-        /**
-         * Total number of actions
-         */
-        int numActions;
-
-        /**
-         * Number of actions done
-         */
-        int numActionsDone;
-
-        public SwitchExerciseStep(Exercise exercise, int numActions) {
-            this.exercise = exercise;
-            this.numActions = numActions;
-            this.numActionsDone = 0;
-        }
-    }
-
-    /**
-     * Exercise action step
-     */
-    static class ActionStep implements IStep {
-        /**
-         * Description
-         */
-        String text;
-
-        /**
-         * Duration
-         */
-        long durationMs;
-
-        /**
-         * Timestamp when the state was started
-         */
-        long startTimeMs;
-
-        /**
-         * Indication if session is paused or not
-         */
-        boolean paused = false;
-
-        /**
-         * Timestamp when the session was paused
-         */
-        long pausedTimeMs = 0;
-
-        /**
-         * How many warning beeps left to be played (one per each second before state is finished)
-         */
-        int mNumWarningBeeps = 3;
-
-        void resetTime() {
-            startTimeMs = System.currentTimeMillis();
-        }
-
-        public ActionStep(String text, long durationMs) {
-            this.text = text;
-            this.durationMs = durationMs;
-        }
-
-        long getElapsedTimeMs() {
-            if (paused) {
-                return pausedTimeMs - startTimeMs;
-            } else {
-                return System.currentTimeMillis() - startTimeMs;
-            }
-        }
-
-        boolean isCompleted() {
-            return getRemainingMs() <= 0;
-        }
-
-        long getRemainingMs() {
-            return durationMs - getElapsedTimeMs();
-        }
-
-        void togglePause(boolean paused) {
-            if (this.paused == paused) {
-                return;
-            }
-
-            this.paused = paused;
-
-            if (this.paused) {
-                pausedTimeMs = System.currentTimeMillis();
-            } else {
-                startTimeMs = System.currentTimeMillis() - (pausedTimeMs - startTimeMs);
-            }
-        }
-    }
-
-    /**
-     * Start everything
-     */
-    static class StartedStep implements IStep {
-    }
-
-    /**
-     * All done
-     */
-    static class FinishedStep implements IStep {
-    }
+    private static final long kUPDATE_PERIOD_MS = 50;
 
     /**
      * Action handler
@@ -194,7 +76,7 @@ public class MainActivity extends AppCompatActivity {
     SwitchExerciseStep mCurrentExercise;
 
     /**
-     * Current exercise action stpe
+     * Current exercise action step
      */
     ActionStep mCurrentAction;
 
@@ -208,20 +90,14 @@ public class MainActivity extends AppCompatActivity {
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
 
-        setContentView(R.layout.activity_main);
-
-        // Hide the status bar
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN);
-        getSupportActionBar().hide();
-
         mHandler = new Handler(getMainLooper());
 
-        mSteps = generateSteps(Exercise.load());
+        mSteps = StepGenerator.generateSteps(Exercise.load());
         mTotalSteps = mSteps.size();
 
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-        findViewById(R.id.buttonPlayPause).setOnClickListener(view -> MainActivity.this.togglePlayPause());
-
+        // Wait for TTS to initialize, then start
         mTts = new TextToSpeech(getApplicationContext(), status -> {
             if (status == TextToSpeech.ERROR) {
 
@@ -231,76 +107,39 @@ public class MainActivity extends AppCompatActivity {
                 mTts.setLanguage(Locale.US);
             }
 
-            doWork();
 
-            Runnable runnable = new Runnable() {
-                @Override
-                public void run() {
-                    if (!doWork()) {
-                        return;
-                    }
-
-                    mHandler.postDelayed(this, 100);
-                }
-            };
-
-            mHandler.post(runnable);
+            start();
         });
-
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 
     /**
-     * Given a list of exercises, generate a list of steps
+     * Start everything
      */
-    static List<IStep> generateSteps(List<Exercise> exercises) {
-        ArrayList<IStep> steps = new ArrayList<>();
+    private void start() {
+        setContentView(R.layout.activity_main);
 
-        steps.add(new StartedStep());
+        findViewById(R.id.buttonPlayPause).setOnClickListener(view -> MainActivity.this.togglePlayPause());
 
-        for (int exerciseIndex = 0; exerciseIndex < exercises.size(); exerciseIndex++) {
-            Exercise exercise = exercises.get(exerciseIndex);
+        // Hide the status bar
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN);
+        getSupportActionBar().hide();
 
-            ArrayList<ActionStep> actions = new ArrayList<>();
+        // Load up initial exercise
+        doWork();
 
-            for (int i = 0; i < exercise.numRepetitions; i++) {
-
-                // Do rep
-                actions.add(new ActionStep(
-                        exercise.bothSides ? "Hold left" : "Hold", kHOLD_DURATION_MS
-                ));
-
-                if (exercise.bothSides) {
-                    // Rest between sides
-                    actions.add(new ActionStep(
-                            "Rest", kREP_REST_DURATION_MS
-                    ));
-
-                    // Do other side
-                    actions.add(new ActionStep("Hold right", kHOLD_DURATION_MS));
+        Runnable runnable = new Runnable() {
+            @Override
+            public void run() {
+                if (!doWork()) {
+                    return;
                 }
 
-                // Rest between reps (if not the last exercise)
-                if (i != exercise.numRepetitions - 1) {
-                    actions.add(new ActionStep(
-                            "Rest", kREP_REST_DURATION_MS
-                    ));
-                }
+                mHandler.postDelayed(this, kUPDATE_PERIOD_MS);
             }
+        };
 
-            steps.add(new SwitchExerciseStep(exercise, actions.size()));
-            steps.addAll(actions);
-
-            if (exerciseIndex != exercises.size() - 1) {
-                actions.add(new ActionStep(
-                        "Rest", kREST_DURATION_MS
-                ));
-            }
-        }
-
-        steps.add(new FinishedStep());
-
-        return steps;
+        // Start working
+        mHandler.post(runnable);
     }
 
     @Override
@@ -401,9 +240,9 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // Give off warning that state is about to expire
-        if (mCurrentAction.mNumWarningBeeps > 0 && mCurrentAction.getRemainingMs() <= (mCurrentAction.mNumWarningBeeps * 1000)) {
-            mCurrentAction.mNumWarningBeeps -= 1;
-            mToneGen.startTone(mCurrentAction.mNumWarningBeeps > 0 ? ToneGenerator.TONE_CDMA_PIP : ToneGenerator.TONE_DTMF_A, mCurrentAction.mNumWarningBeeps > 0 ? 150 : 700);
+        if (mCurrentAction.numWarningBeeps > 0 && mCurrentAction.getRemainingMs() <= (mCurrentAction.numWarningBeeps * 1000)) {
+            mCurrentAction.numWarningBeeps -= 1;
+            mToneGen.startTone(mCurrentAction.numWarningBeeps > 0 ? ToneGenerator.TONE_CDMA_PIP : ToneGenerator.TONE_DTMF_A, mCurrentAction.numWarningBeeps > 0 ? 150 : 700);
         }
         String elapsedTimeStr = formatElapsedTime(mCurrentAction.getRemainingMs());
 

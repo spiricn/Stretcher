@@ -122,10 +122,14 @@ public class MainActivity extends AppCompatActivity {
             return durationMs - getElapsedTimeMs();
         }
 
-        void togglePause() {
-            paused = !paused;
+        void togglePause(boolean paused) {
+            if (this.paused == paused) {
+                return;
+            }
 
-            if (paused) {
+            this.paused = paused;
+
+            if (this.paused) {
                 pausedTimeMs = System.currentTimeMillis();
             } else {
                 startTimeMs = System.currentTimeMillis() - (pausedTimeMs - startTimeMs);
@@ -201,6 +205,21 @@ public class MainActivity extends AppCompatActivity {
     public void onPause() {
         super.onPause();
 
+        mSession.togglePause(true);
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+
+        mSession.togglePause(false);
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+
+
         mHandler.removeCallbacksAndMessages(null);
 
         mTts.stop();
@@ -230,7 +249,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        mSession.togglePause();
+        mSession.togglePause(!mSession.paused);
 
         ((ImageButton) findViewById(R.id.buttonPlayPause)).setImageResource(
                 mSession.paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause

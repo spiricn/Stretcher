@@ -14,6 +14,9 @@ public class Exercise {
      */
     public String fullDescription;
 
+    /**
+     * Brief description
+     */
     public String briefDescription;
 
     /**

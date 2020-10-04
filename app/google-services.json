@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "822341063283",
+    "firebase_url": "https://stretcher-5717f.firebaseio.com",
+    "project_id": "stretcher-5717f",
+    "storage_bucket": "stretcher-5717f.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:822341063283:android:37bb1e8d81ea82cf9e9006",
+        "android_client_info": {
+          "package_name": "com.stretcher"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "822341063283-dlfup2o137vup2phsi8gsttf14iniggp.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCzlR3VwVR12SgmPSJ2QVqcvxf519Zame8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "822341063283-dlfup2o137vup2phsi8gsttf14iniggp.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

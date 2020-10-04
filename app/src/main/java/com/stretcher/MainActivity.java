@@ -1,10 +1,13 @@
 package com.stretcher;
 
-import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
 
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.content.Context;
-import android.os.Build;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.annotation.SuppressLint;
@@ -32,13 +35,13 @@ import com.stretcher.steps.SwitchExerciseStep;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Random;
 
 public class MainActivity extends AppCompatActivity {
     /**
      * Log tag
      */
-    private static final String TAG = MainActivity.class.getCanonicalName();
-
+    private static final String kTAG = MainActivity.class.getCanonicalName();
 
     /**
      * Time elapsed between some work
@@ -112,9 +115,11 @@ public class MainActivity extends AppCompatActivity {
                 mTts.setLanguage(Locale.US);
             }
 
-
             start();
         });
+
+        // Schedule periodic reminders
+        ReminderWorker.schedule(this);
     }
 
     /**
@@ -215,7 +220,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.O)
     private boolean doWork() {
         while (mCurrentStep == null) {
             ((ProgressBar) findViewById(R.id.totalProgressBar)).setProgress(
@@ -224,7 +228,7 @@ public class MainActivity extends AppCompatActivity {
 
             mCurrentStep = mSteps.remove(0);
 
-            Log.d(TAG, "Run step: " + mCurrentStep);
+            Log.d(kTAG, "Run step: " + mCurrentStep);
 
             // Finished
             if (mCurrentStep instanceof FinishedStep) {
@@ -300,7 +304,7 @@ public class MainActivity extends AppCompatActivity {
      * @param string Text to speak
      */
     private void speak(String string) {
-        Log.d(TAG, string);
+        Log.d(kTAG, string);
 
         if (mTts != null) {
             mTts.speak(string, TextToSpeech.QUEUE_ADD, null);
